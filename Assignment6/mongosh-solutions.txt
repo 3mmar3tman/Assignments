@@ -1,0 +1,96 @@
+// Assignment 7 - MongoDB Shell (mongosh)
+// Select the database first:
+use assignment7_db
+
+// Optional sample data (run before the query tasks if you need test data):
+// db.books.insertMany([
+//   { title: "Brave New World", author: "Aldous Huxley", year: 1932, genres: ["Science Fiction", "Dystopian"] },
+//   { title: "Future", author: "Sample Author", year: 2020, genres: ["Science Fiction"] },
+//   { title: "The Hobbit", author: "J.R.R. Tolkien", year: 1937, genres: ["Fantasy"] },
+//   { title: "Dune", author: "Frank Herbert", year: 1965, genres: ["Science Fiction"] },
+//   { title: "The Road", author: "Cormac McCarthy", year: 2006, genres: ["Drama"] },
+//   { title: "The Hunger Games", author: "Suzanne Collins", year: 2008, genres: ["Science Fiction", "Adventure"] },
+//   { title: "The Girl with the Dragon Tattoo", author: "Stieg Larsson", year: 2005, genres: ["Crime", "Mystery"] }
+// ])
+
+// 1. Explicit books collection with non-empty title validation
+db.createCollection("books", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["title"],
+      properties: { title: { bsonType: "string", minLength: 1, pattern: ".*\\S.*" } }
+    }
+  },
+  validationLevel: "strict",
+  validationAction: "error"
+})
+
+// 2. Implicit authors collection: insertion creates the collection if absent
+db.authors.insertOne({ name: "George Orwell", country: "United Kingdom" })
+
+// 3. Capped logs collection, 1 MB
+db.createCollection("logs", { capped: true, size: 1048576 })
+
+// 4. Index on books.title
+db.books.createIndex({ title: 1 })
+
+// 5. Insert one book
+db.books.insertOne({ title: "Future", author: "Sample Author", year: 2020, genres: ["Science Fiction"] })
+
+// 6. Insert at least three books
+db.books.insertMany([
+  { title: "Brave New World", author: "Aldous Huxley", year: 1932, genres: ["Science Fiction", "Dystopian"] },
+  { title: "The Road", author: "Cormac McCarthy", year: 2006, genres: ["Drama"] },
+  { title: "The Hunger Games", author: "Suzanne Collins", year: 2008, genres: ["Science Fiction", "Adventure"] }
+])
+
+// 7. Insert a log. bookTitle supports the lookup in task 19.
+db.logs.insertOne({ bookTitle: "Future", message: "Book record created", level: "info", createdAt: new Date() })
+
+// 8. Update the book titled Future
+db.books.updateOne({ title: "Future" }, { $set: { year: 2022 } })
+
+// 9. Find Brave New World
+db.books.find({ title: "Brave New World" })
+
+// 10. Books published between 1990 and 2010 inclusive
+db.books.find({ year: { $gte: 1990, $lte: 2010 } })
+
+// 11. Genre includes Science Fiction
+db.books.find({ genres: "Science Fiction" })
+
+// 12. Skip first two, return next three, year descending
+db.books.find().sort({ year: -1 }).skip(2).limit(3)
+
+// 13. year field stored as BSON integer
+db.books.find({ year: { $type: "int" } })
+
+// 14. Genres contain neither Horror nor Science Fiction
+db.books.find({ genres: { $nin: ["Horror", "Science Fiction"] } })
+
+// 15. Delete books published before 2000
+db.books.deleteMany({ year: { $lt: 2000 } })
+
+// 16. Aggregation: books after 2000, descending year
+db.books.aggregate([
+  { $match: { year: { $gt: 2000 } } },
+  { $sort: { year: -1 } }
+])
+
+// 17. Aggregation: after 2000, project title, author, year only
+db.books.aggregate([
+  { $match: { year: { $gt: 2000 } } },
+  { $project: { _id: 0, title: 1, author: 1, year: 1 } }
+])
+
+// 18. Split each genres array into separate documents
+db.books.aggregate([
+  { $unwind: "$genres" },
+  { $project: { _id: 0, title: 1, author: 1, year: 1, genre: "$genres" } }
+])
+
+// 19. Join books with logs using the shared bookTitle field
+db.books.aggregate([
+  { $lookup: { from: "logs", localField: "title", foreignField: "bookTitle", as: "relatedLogs" } }
+])
